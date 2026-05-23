@@ -1,0 +1,778 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CureNow 広告ダッシュボード (MVP)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif; }
+  .ad-card img { aspect-ratio: 1/1; object-fit: cover; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+<div class="max-w-7xl mx-auto p-6">
+  <header class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold">CureNow 広告ダッシュボード <span class="text-sm font-normal text-slate-500">MVP / Mock</span></h1>
+      <p class="text-sm text-slate-500">Meta act_2172563619854212 / 最終取得: <span id="generated_at"></span></p>
+    </div>
+    <button id="refresh_btn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-slate-400 text-sm">Meta再取得</button>
+  </header>
+
+  <!-- Top nav -->
+  <nav class="flex gap-2 mb-4 flex-wrap text-sm">
+    <a href="#" class="nav-link px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 font-semibold">全体</a>
+    <a href="#/dept/小児科" class="nav-link px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-pink-100">小児科</a>
+    <a href="#/dept/糖尿病" class="nav-link px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-orange-100">糖尿病</a>
+    <a href="#/dept/痛風" class="nav-link px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-purple-100">痛風</a>
+    <a href="#/dept/医療ダイエット" class="nav-link px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-amber-100">医療ダイエット</a>
+    <a href="#/dept/ED" class="nav-link px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-blue-100">ED</a>
+  </nav>
+
+  <!-- OVERVIEW MODE (default) -->
+  <div id="view_overview">
+  <!-- Summary cards -->
+  <section id="summary" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></section>
+
+  <!-- Campaign chart -->
+  <section class="bg-white rounded-xl p-5 mb-6 shadow-sm">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-lg font-semibold">キャンペーン日次推移</h2>
+      <div class="flex gap-1 text-xs">
+        <button data-metric="ctr" class="metric-btn px-3 py-1 rounded bg-indigo-600 text-white">CTR (%)</button>
+        <button data-metric="spend" class="metric-btn px-3 py-1 rounded bg-slate-200">spend (¥)</button>
+        <button data-metric="cv" class="metric-btn px-3 py-1 rounded bg-slate-200">CV (件)</button>
+        <button data-metric="cpa" class="metric-btn px-3 py-1 rounded bg-slate-200">CPA (¥)</button>
+      </div>
+    </div>
+    <canvas id="campaign_chart" height="100"></canvas>
+  </section>
+
+  <!-- Daily metrics tables per 科目 -->
+  <section class="bg-white rounded-xl p-5 mb-6 shadow-sm">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <h2 class="text-lg font-semibold">科目別 日次数値テーブル</h2>
+      <div class="flex gap-1 text-xs">
+        <button data-tablesort="date_desc" class="tablesort-btn px-3 py-1 rounded bg-indigo-600 text-white">新しい順</button>
+        <button data-tablesort="date_asc" class="tablesort-btn px-3 py-1 rounded bg-slate-200">古い順</button>
+      </div>
+    </div>
+    <div id="tables_per_dept" class="space-y-6"></div>
+  </section>
+
+  <!-- Creatives grid -->
+  <section class="bg-white rounded-xl p-5 shadow-sm">
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <h2 class="text-lg font-semibold">クリエ一覧 (<span id="ads_count">0</span>本 ACTIVE)</h2>
+      <div class="flex gap-2 items-center flex-wrap">
+        <label class="text-xs text-slate-500">科目:</label>
+        <select id="filter_dept" class="text-xs px-2 py-1 rounded border border-slate-300">
+          <option value="">all</option>
+          <option>小児科</option><option>糖尿病</option><option>高血圧</option><option>痛風</option>
+          <option>脂質異常症</option><option>花粉症</option><option>ED</option><option>医療ダイエット</option>
+        </select>
+        <label class="text-xs text-slate-500">訴求軸:</label>
+        <select id="filter_axis" class="text-xs px-2 py-1 rounded border border-slate-300">
+          <option value="">all</option>
+          <option>即時診察</option><option>通院ゼロ</option><option>院内感染回避</option><option>夜間対応</option>
+          <option>共感喚起</option><option>危機感喚起</option><option>薬入手</option><option>汎用</option>
+        </select>
+        <label class="text-xs text-slate-500">キャンペーン:</label>
+        <select id="filter_campaign" class="text-xs px-2 py-1 rounded border border-slate-300">
+          <option value="">all</option>
+        </select>
+      </div>
+    </div>
+    <div id="ads_grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"></div>
+  </section>
+  </div><!-- end #view_overview -->
+
+  <!-- DEPT DETAIL MODE -->
+  <div id="view_detail" class="hidden"></div>
+
+  <footer class="mt-8 text-xs text-slate-400 text-center">
+    Phase 1 MVP — Meta API実データ (data.json) / LP数値(GA4)は次段で wire。
+  </footer>
+</div>
+
+<script>
+// ==== Data (loaded from data.json at runtime) ====
+let DATA = { generated_at: "loading…", campaigns: [], adsets: [], ads: [], actions: [] };
+const CAMPAIGN_COLORS = {
+  "120217478345100044": "#94a3b8",
+  "120242830447810044": "#ec4899",
+  "120241383251200044": "#f59e0b",
+  "120240758552340044": "#3b82f6"
+};
+const CAMPAIGN_SHORT = {
+  "120217478345100044": "生活習慣病",
+  "120242830447810044": "小児科",
+  "120241383251200044": "ダイエット",
+  "120240758552340044": "ED"
+};
+
+const COL = { DATE:0, IMP:1, CLICK:2, CTR:3, SPEND:4, LINK:5, CV:6 };
+
+const fmt = {
+  yen: n => "¥" + (n||0).toLocaleString(),
+  num: n => (n||0).toLocaleString(),
+  pct: n => (n||0).toFixed(2) + "%",
+  cpa: (spend, cv) => cv > 0 ? "¥" + Math.round(spend/cv).toLocaleString() : "-"
+};
+
+function sumDaily(daily, lookback) {
+  const rows = lookback ? daily.slice(-lookback) : daily;
+  return rows.reduce((a,r)=>({
+    imp:a.imp+r[COL.IMP], click:a.click+r[COL.CLICK], spend:a.spend+r[COL.SPEND],
+    link:a.link+r[COL.LINK], cv:a.cv+r[COL.CV]
+  }), {imp:0,click:0,spend:0,link:0,cv:0});
+}
+
+function renderSummary() {
+  const el = document.getElementById("summary");
+  el.innerHTML = DATA.campaigns.map(c=>{
+    const last7 = sumDaily(c.daily, 7);
+    const ctr = last7.imp ? (last7.click/last7.imp*100) : 0;
+    const cpa = last7.cv ? Math.round(last7.spend/last7.cv) : null;
+    return `<div class="bg-white rounded-xl p-4 shadow-sm border-l-4" style="border-color:${c.color}">
+      <div class="text-xs text-slate-500">${c.short} (直近7日)</div>
+      <div class="text-2xl font-bold mt-1">${fmt.pct(ctr)}</div>
+      <div class="text-xs text-slate-500 mt-2 flex justify-between">
+        <span>spend ${fmt.yen(last7.spend)}</span><span>CV ${last7.cv}</span>
+      </div>
+      <div class="text-xs text-slate-500 mt-1">CPA ${cpa ? "¥"+cpa.toLocaleString() : "-"}</div>
+    </div>`;
+  }).join("");
+}
+
+// 科目 → campaign(s)/adset(s) マッピング
+const DEPT_TO_CAMPAIGNS = {
+  "小児科": ["120242830447810044"],
+  "医療ダイエット": ["120241383251200044"],
+  "ED": ["120240758552340044"],
+  "糖尿病+痛風 (旧カラケン)": ["120217478345100044"]
+};
+const DEPT_DETAIL = {
+  "小児科": { color:"#ec4899", campaigns:["120242830447810044"], adsets:["120242830447790044"], lps:[
+    {url:"https://anycure.jp/mk/curenow/pediatrics/LP1/main.html", status:"公開中", variant:"LP1", axis:"通院ゼロ"},
+    {url:"https://anycure.jp/lp/karaken/pediatrics/", status:"公開中 (旧)", variant:"karaken", axis:"アンケート"}
+  ]},
+  "糖尿病": { color:"#f97316", campaigns:["120217478345100044"], adsets:["120223788810460044"], lps:[
+    {url:"https://anycure.jp/mk/curenow/diabetes/LP1/main.html", status:"公開中", variant:"LP1", axis:"通院ゼロ"}
+  ]},
+  "痛風": { color:"#a855f7", campaigns:["120217478345100044"], adsets:["120234490804810044"], lps:[
+    {url:"https://anycure.jp/mk/curenow/gout/LP1/main.html", status:"準備中", variant:"LP1", axis:"危機感喚起"},
+    {url:"https://karada-kenko.jp/lp/questionnaire/", status:"廃止予定", variant:"karaken", axis:"アンケート"}
+  ]},
+  "医療ダイエット": { color:"#f59e0b", campaigns:["120241383251200044"], adsets:["120241383251150044"], lps:[
+    {url:"-", status:"未作成", variant:"-", axis:"-"}
+  ]},
+  "ED": { color:"#3b82f6", campaigns:["120240758552340044"], adsets:[], lps:[
+    {url:"-", status:"未作成", variant:"-", axis:"-"}
+  ]}
+};
+const ADSETS = {
+  "120242830447790044": { name:"260511_小児科_CV(linkClick)", daily_budget:10000, dept:"小児科",
+    targeting:"女性主体 / 20-50歳 / 子育て関心 / 東京" },
+  "120241383251150044": { name:"260422_ダイエット_CV(linkClick)", daily_budget:10000, dept:"医療ダイエット",
+    targeting:"女性 / 18-40歳 / 全国" },
+  "120234490804810044": { name:"診察予約_男性_通風_20251216", daily_budget:2000, dept:"痛風",
+    targeting:"男性 / 30-65歳 / ビール・コレステロール関心 / 全国" },
+  "120223788810460044": { name:"診察予約_女性_糖尿病_20250614", daily_budget:7000, dept:"糖尿病",
+    targeting:"女性 / 25-65歳 / 健康・エクササイズ関心 / 全国" }
+};
+
+function renderTables(order) {
+  const container = document.getElementById("tables_per_dept");
+  const campMap = Object.fromEntries(DATA.campaigns.map(c=>[c.id, c]));
+  container.innerHTML = Object.entries(DEPT_TO_CAMPAIGNS).map(([dept, cids]) => {
+    // 同一日付で複数 campaign がある場合は合計する (今は1:1だが将来用)
+    const dailyMap = {};
+    cids.forEach(cid => {
+      const c = campMap[cid]; if (!c) return;
+      c.daily.forEach(r => {
+        const d = r[COL.DATE];
+        if (!dailyMap[d]) dailyMap[d] = {imp:0,click:0,spend:0,link:0,cv:0};
+        dailyMap[d].imp += r[COL.IMP];
+        dailyMap[d].click += r[COL.CLICK];
+        dailyMap[d].spend += r[COL.SPEND];
+        dailyMap[d].link += r[COL.LINK];
+        dailyMap[d].cv += r[COL.CV];
+      });
+    });
+    const rows = Object.entries(dailyMap).map(([d,v]) => ({
+      date:d, ...v, ctr: v.imp ? (v.click/v.imp*100) : 0,
+      cpc: v.click ? Math.round(v.spend/v.click) : null,
+      cpa: v.cv ? Math.round(v.spend/v.cv) : null
+    }));
+    rows.sort((a,b) => order==="date_asc" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
+    const total = rows.reduce((a,r) => ({
+      imp:a.imp+r.imp, click:a.click+r.click, spend:a.spend+r.spend, link:a.link+r.link, cv:a.cv+r.cv
+    }), {imp:0,click:0,spend:0,link:0,cv:0});
+    const total_ctr = total.imp ? (total.click/total.imp*100).toFixed(2)+"%" : "-";
+    const total_cpa = total.cv ? "¥"+Math.round(total.spend/total.cv).toLocaleString() : "-";
+    const camp_color = campMap[cids[0]]?.color || "#999";
+
+    return `<div>
+      <div class="flex items-baseline gap-3 mb-2 pb-2 border-b" style="border-color:${camp_color}">
+        <span class="inline-block w-3 h-3 rounded-full" style="background:${camp_color}"></span>
+        <h3 class="text-base font-bold">${dept}</h3>
+        <span class="text-xs text-slate-500">${rows.length} 日 / 累計: imp ${total.imp.toLocaleString()} / clicks ${total.click.toLocaleString()} / CTR ${total_ctr} / spend ${fmt.yen(total.spend)} / CV ${total.cv} / CPA ${total_cpa}</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="text-xs w-full">
+          <thead class="bg-slate-100 text-slate-600">
+            <tr>
+              <th class="text-left px-2 py-1.5">日付</th>
+              <th class="text-right px-2 py-1.5">表示回数</th>
+              <th class="text-right px-2 py-1.5">クリック</th>
+              <th class="text-right px-2 py-1.5">CTR</th>
+              <th class="text-right px-2 py-1.5">link_click</th>
+              <th class="text-right px-2 py-1.5">spend</th>
+              <th class="text-right px-2 py-1.5">CPC</th>
+              <th class="text-right px-2 py-1.5">CV (LINE)</th>
+              <th class="text-right px-2 py-1.5">CPA</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => `<tr class="border-b border-slate-100 hover:bg-slate-50">
+              <td class="px-2 py-1 font-mono">${r.date}</td>
+              <td class="px-2 py-1 text-right tabular-nums">${r.imp.toLocaleString()}</td>
+              <td class="px-2 py-1 text-right tabular-nums">${r.click.toLocaleString()}</td>
+              <td class="px-2 py-1 text-right tabular-nums ${r.ctr >= 10 ? 'text-green-600 font-semibold' : r.ctr < 1 ? 'text-red-500':''}">${r.ctr.toFixed(2)}%</td>
+              <td class="px-2 py-1 text-right tabular-nums">${r.link.toLocaleString()}</td>
+              <td class="px-2 py-1 text-right tabular-nums">¥${r.spend.toLocaleString()}</td>
+              <td class="px-2 py-1 text-right tabular-nums text-slate-500">${r.cpc ? '¥'+r.cpc.toLocaleString() : '-'}</td>
+              <td class="px-2 py-1 text-right tabular-nums ${r.cv >= 20 ? 'text-green-600 font-semibold' : ''}">${r.cv}</td>
+              <td class="px-2 py-1 text-right tabular-nums ${r.cpa && r.cpa <= 500 ? 'text-green-600 font-semibold' : r.cpa && r.cpa >= 2000 ? 'text-red-500':''}">${r.cpa ? '¥'+r.cpa.toLocaleString() : '-'}</td>
+            </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+let chart;
+function renderChart(metric) {
+  // Common date axis = union of all campaign daily dates
+  const allDates = Array.from(new Set(DATA.campaigns.flatMap(c=>c.daily.map(r=>r[COL.DATE])))).sort();
+  const datasets = DATA.campaigns.map(c => {
+    const map = Object.fromEntries(c.daily.map(r=>[r[COL.DATE], r]));
+    return {
+      label: c.short,
+      data: allDates.map(d => {
+        const r = map[d]; if (!r) return null;
+        if (metric === "ctr") return r[COL.CTR];
+        if (metric === "spend") return r[COL.SPEND];
+        if (metric === "cv") return r[COL.CV];
+        if (metric === "cpa") return r[COL.CV] > 0 ? Math.round(r[COL.SPEND]/r[COL.CV]) : null;
+      }),
+      borderColor: c.color, backgroundColor: c.color+"33", tension: 0.3, spanGaps: true, borderWidth: 2
+    };
+  });
+  if (chart) chart.destroy();
+  chart = new Chart(document.getElementById("campaign_chart"), {
+    type: "line",
+    data: { labels: allDates, datasets },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: "top" }},
+      scales: { y: { beginAtZero: true, ticks: { callback: v => metric==="ctr" ? v+"%" : metric==="spend"||metric==="cpa" ? "¥"+v.toLocaleString() : v }}}
+    }
+  });
+}
+
+function getFilteredAds() {
+  const dept = document.getElementById("filter_dept").value;
+  const axis = document.getElementById("filter_axis").value;
+  const cid = document.getElementById("filter_campaign").value;
+  return DATA.ads.filter(a =>
+    (!dept || (a.dept && a.dept.includes(dept))) &&
+    (!axis || a.axis === axis) &&
+    (!cid || a.campaign_id === cid)
+  );
+}
+
+function renderGrid() {
+  const ads = getFilteredAds();
+  document.getElementById("ads_count").textContent = ads.length;
+  const campMap = Object.fromEntries(DATA.campaigns.map(c=>[c.id, c]));
+  document.getElementById("ads_grid").innerHTML = ads.map(a=>{
+    const c = campMap[a.campaign_id] || {short:"?", color:"#999"};
+    const lp = a.link ? new URL(a.link).pathname : "";
+    const isOldLP = a.link && a.link.includes("karada-kenko.jp");
+    return `<div class="ad-card bg-slate-50 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition flex flex-col">
+      <img src="${a.image}" alt="" class="w-full" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'flex items-center justify-center bg-slate-200 text-slate-500 text-[10px] p-2 text-center',style:'aspect-ratio:1/1',textContent:'(画像URL期限切れ\\nMeta再取得で復旧)'}))">
+      <div class="p-3 flex-1 flex flex-col">
+        <div class="text-xs font-semibold truncate" title="${a.name}">${a.name}</div>
+        <div class="flex flex-wrap gap-1 mt-2">
+          <span class="text-[10px] px-2 py-0.5 rounded-full text-white" style="background:${c.color}">${c.short}</span>
+          ${(a.dept||[]).map(d=>`<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-200">${d}</span>`).join("")}
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">${a.axis}</span>
+        </div>
+        <div class="text-[10px] text-slate-400 mt-auto pt-2 truncate ${isOldLP ? 'text-red-500':''}" title="${a.link}">
+          ${isOldLP ? '[旧karaken]':'→ '}${lp}
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// init - fetch data.json then render
+async function bootstrap() {
+  try {
+    const r = await fetch("./data.json?t=" + Date.now());
+    if (!r.ok) throw new Error("data.json HTTP " + r.status);
+    DATA = await r.json();
+  } catch (e) {
+    document.getElementById("generated_at").textContent = "読み込み失敗: " + e.message;
+    return;
+  }
+  // augment campaigns with color/short from runtime maps
+  DATA.campaigns.forEach(c => {
+    c.color = CAMPAIGN_COLORS[c.id] || "#999";
+    c.short = CAMPAIGN_SHORT[c.id] || c.name.slice(0, 12);
+  });
+  document.getElementById("generated_at").textContent = DATA.generated_at;
+  const campSel = document.getElementById("filter_campaign");
+  campSel.innerHTML = '<option value="">all</option>';
+  DATA.campaigns.forEach(c => {
+    const opt = document.createElement("option"); opt.value = c.id; opt.textContent = c.short;
+    campSel.appendChild(opt);
+  });
+  renderSummary();
+  renderChart("ctr");
+  renderTables("date_desc");
+  renderGrid();
+  route(); // re-route in case detail page is open
+}
+bootstrap();
+
+document.querySelectorAll(".metric-btn").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".metric-btn").forEach(b => b.className = "metric-btn px-3 py-1 rounded bg-slate-200");
+    btn.className = "metric-btn px-3 py-1 rounded bg-indigo-600 text-white";
+    renderChart(btn.dataset.metric);
+  };
+});
+document.querySelectorAll(".tablesort-btn").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".tablesort-btn").forEach(b => b.className = "tablesort-btn px-3 py-1 rounded bg-slate-200");
+    btn.className = "tablesort-btn px-3 py-1 rounded bg-indigo-600 text-white";
+    renderTables(btn.dataset.tablesort);
+  };
+});
+["filter_dept","filter_axis","filter_campaign"].forEach(id => {
+  document.getElementById(id).onchange = renderGrid;
+});
+
+// ==== 科目詳細ビュー ====
+function adsForDept(dept) {
+  const cfg = DEPT_DETAIL[dept]; if (!cfg) return [];
+  return DATA.ads.filter(a =>
+    cfg.adsets.includes(a.adset_id) ||
+    (a.dept && a.dept.includes(dept))
+  );
+}
+
+function dailyForDept(dept) {
+  // adset単位の日次分割は要Meta token、ここでは campaign 単位の日次を流用
+  const cfg = DEPT_DETAIL[dept]; if (!cfg) return [];
+  const campMap = Object.fromEntries(DATA.campaigns.map(c=>[c.id, c]));
+  const dailyMap = {};
+  cfg.campaigns.forEach(cid => {
+    const c = campMap[cid]; if (!c) return;
+    c.daily.forEach(r => {
+      const d = r[COL.DATE];
+      if (!dailyMap[d]) dailyMap[d] = {imp:0,click:0,spend:0,link:0,cv:0};
+      dailyMap[d].imp += r[COL.IMP];
+      dailyMap[d].click += r[COL.CLICK];
+      dailyMap[d].spend += r[COL.SPEND];
+      dailyMap[d].link += r[COL.LINK];
+      dailyMap[d].cv += r[COL.CV];
+    });
+  });
+  return Object.entries(dailyMap).map(([d,v]) => ({
+    date:d, ...v, ctr: v.imp ? (v.click/v.imp*100) : 0,
+    cpc: v.click ? Math.round(v.spend/v.click) : null,
+    cpa: v.cv ? Math.round(v.spend/v.cv) : null
+  })).sort((a,b)=>b.date.localeCompare(a.date));
+}
+
+function weeklySummary(daily) {
+  if (!daily.length) return [];
+  // 直近の週から逆順、7日でグループ化
+  const sorted = [...daily].sort((a,b)=>a.date.localeCompare(b.date));
+  const weeks = [];
+  for (let i = sorted.length - 1; i >= 0; i -= 7) {
+    const slice = sorted.slice(Math.max(0, i-6), i+1);
+    const sum = slice.reduce((a,r)=>({
+      imp:a.imp+r.imp, click:a.click+r.click, spend:a.spend+r.spend, link:a.link+r.link, cv:a.cv+r.cv
+    }), {imp:0,click:0,spend:0,link:0,cv:0});
+    weeks.unshift({
+      start: slice[0].date, end: slice[slice.length-1].date, days: slice.length,
+      ...sum, ctr: sum.imp ? (sum.click/sum.imp*100) : 0,
+      cpa: sum.cv ? Math.round(sum.spend/sum.cv) : null
+    });
+  }
+  return weeks;
+}
+
+// ==== Notion 施策セクション ====
+const ACTION_STATUS_ORDER = { "実行中":1, "検証中":2, "提案":3, "保留":4, "完了":5, "却下":6 };
+const ACTION_PRIORITY_ORDER = { "P0":1, "P1":2, "P2":3 };
+const ACTION_STATUS_STYLE = {
+  "提案":   "bg-slate-200 text-slate-700",
+  "実行中": "bg-blue-100 text-blue-800",
+  "検証中": "bg-yellow-100 text-yellow-800",
+  "完了":   "bg-green-100 text-green-800",
+  "却下":   "bg-red-100 text-red-700",
+  "保留":   "bg-red-100 text-red-700"
+};
+const ACTION_PRIORITY_STYLE = {
+  "P0": "bg-red-100 text-red-700",
+  "P1": "bg-yellow-100 text-yellow-800",
+  "P2": "bg-slate-200 text-slate-600"
+};
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+function actionsForDept(dept) {
+  const list = (DATA.actions || []).filter(a => Array.isArray(a.depts) && a.depts.includes(dept));
+  list.sort((a,b) => {
+    const sa = ACTION_STATUS_ORDER[a.status] || 99;
+    const sb = ACTION_STATUS_ORDER[b.status] || 99;
+    if (sa !== sb) return sa - sb;
+    const pa = ACTION_PRIORITY_ORDER[a.priority] || 99;
+    const pb = ACTION_PRIORITY_ORDER[b.priority] || 99;
+    if (pa !== pb) return pa - pb;
+    return String(b.date||"").localeCompare(String(a.date||""));
+  });
+  return list;
+}
+function renderActionsSection(dept) {
+  const actions = actionsForDept(dept);
+  return `
+    <section class="bg-white rounded-xl p-5 mb-5 shadow-sm">
+      <h3 class="font-semibold mb-3">実施中施策 (Notion cmo-ai-ad-log) <span class="text-xs font-normal text-slate-500">${actions.length}件</span></h3>
+      ${actions.length === 0 ? '<p class="text-sm text-slate-500">この科目で実施中施策はまだありません</p>' :
+      `<div class="overflow-x-auto">
+        <table class="text-xs w-full">
+          <thead class="bg-slate-100 text-slate-600">
+            <tr>
+              <th class="text-left px-2 py-1.5">status</th>
+              <th class="text-left px-2 py-1.5">prio</th>
+              <th class="text-left px-2 py-1.5">category</th>
+              <th class="text-left px-2 py-1.5">施策名</th>
+              <th class="text-left px-2 py-1.5">期待効果</th>
+              <th class="text-left px-2 py-1.5">改善指標</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${actions.map(a => {
+              const statusCls = ACTION_STATUS_STYLE[a.status] || "bg-slate-200 text-slate-700";
+              const prioCls = ACTION_PRIORITY_STYLE[a.priority] || "bg-slate-200 text-slate-600";
+              const url = a.notion_url ? escapeHtml(a.notion_url) : "";
+              const onclick = url ? `onclick="window.open('${url}','_blank','noopener')"` : "";
+              const cursor = url ? "cursor-pointer" : "";
+              const metrics = Array.isArray(a.metrics) ? a.metrics.join(" / ") : "";
+              return `<tr class="border-b border-slate-100 hover:bg-slate-50 ${cursor}" ${onclick}>
+                <td class="px-2 py-1"><span class="text-[10px] px-2 py-0.5 rounded-full ${statusCls}">${escapeHtml(a.status||"")}</span></td>
+                <td class="px-2 py-1"><span class="text-[10px] px-2 py-0.5 rounded-full ${prioCls}">${escapeHtml(a.priority||"")}</span></td>
+                <td class="px-2 py-1"><span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">${escapeHtml(a.category||"")}</span></td>
+                <td class="px-2 py-1 font-semibold" title="${escapeHtml(a.title||"")}">${escapeHtml(a.title||"")}</td>
+                <td class="px-2 py-1 text-slate-600 max-w-xs truncate" title="${escapeHtml(a.expect||"")}">${escapeHtml(a.expect||"")}</td>
+                <td class="px-2 py-1 text-slate-500">${escapeHtml(metrics)}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>`}
+    </section>
+  `;
+}
+
+function renderDeptDetail(dept) {
+  const cfg = DEPT_DETAIL[dept];
+  if (!cfg) {
+    document.getElementById("view_detail").innerHTML = `<div class="p-6 text-center text-slate-500">「${dept}」のデータがありません</div>`;
+    return;
+  }
+  const ads = adsForDept(dept);
+  const daily = dailyForDept(dept);
+  const total = daily.reduce((a,r)=>({
+    imp:a.imp+r.imp, click:a.click+r.click, spend:a.spend+r.spend, link:a.link+r.link, cv:a.cv+r.cv
+  }), {imp:0,click:0,spend:0,link:0,cv:0});
+  const total_ctr = total.imp ? (total.click/total.imp*100).toFixed(2)+"%" : "-";
+  const total_cpa = total.cv ? "¥"+Math.round(total.spend/total.cv).toLocaleString() : "-";
+  const last7 = daily.slice(0, 7).reduce((a,r)=>({
+    imp:a.imp+r.imp, click:a.click+r.click, spend:a.spend+r.spend, cv:a.cv+r.cv
+  }), {imp:0,click:0,spend:0,cv:0});
+  const last7_ctr = last7.imp ? (last7.click/last7.imp*100).toFixed(2)+"%" : "-";
+  const last7_cpa = last7.cv ? "¥"+Math.round(last7.spend/last7.cv).toLocaleString() : "-";
+  const weeks = weeklySummary(daily);
+
+  document.getElementById("view_detail").innerHTML = `
+    <header class="mb-5">
+      <div class="flex items-center gap-3 mb-1">
+        <h2 class="text-2xl font-bold" style="color:${cfg.color}">${dept}</h2>
+        <span class="text-xs px-2 py-1 rounded-full bg-slate-100">${ads.length} ad ACTIVE / ${cfg.adsets.length} adset / ${cfg.lps.length} LP</span>
+      </div>
+      <p class="text-xs text-slate-500">campaign: ${cfg.campaigns.join(", ")} / adset: ${cfg.adsets.join(", ") || "なし"}</p>
+    </header>
+
+    <!-- KPI summary -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+      <div class="bg-white rounded-xl p-4 shadow-sm">
+        <div class="text-xs text-slate-500">累計 spend</div>
+        <div class="text-2xl font-bold mt-1">${fmt.yen(total.spend)}</div>
+        <div class="text-xs text-slate-500 mt-1">${daily.length}日間</div>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm">
+        <div class="text-xs text-slate-500">累計 CV (LINE登録)</div>
+        <div class="text-2xl font-bold mt-1">${total.cv}</div>
+        <div class="text-xs text-slate-500 mt-1">CPA ${total_cpa}</div>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm">
+        <div class="text-xs text-slate-500">累計 CTR</div>
+        <div class="text-2xl font-bold mt-1">${total_ctr}</div>
+        <div class="text-xs text-slate-500 mt-1">${fmt.num(total.click)} clicks / ${fmt.num(total.imp)} imps</div>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm">
+        <div class="text-xs text-slate-500">直近7日 (CTR / CPA)</div>
+        <div class="text-2xl font-bold mt-1">${last7_ctr}</div>
+        <div class="text-xs text-slate-500 mt-1">spend ${fmt.yen(last7.spend)} / CV ${last7.cv} / CPA ${last7_cpa}</div>
+      </div>
+    </section>
+
+    <!-- 時間別分析: 週次 -->
+    <section class="bg-white rounded-xl p-5 mb-5 shadow-sm">
+      <h3 class="font-semibold mb-3">週次サマリ (7日単位)</h3>
+      ${weeks.length === 0 ? '<p class="text-sm text-slate-500">データなし</p>' :
+      `<table class="text-xs w-full">
+        <thead class="bg-slate-100 text-slate-600">
+          <tr>
+            <th class="text-left px-2 py-1.5">期間</th>
+            <th class="text-right px-2 py-1.5">日数</th>
+            <th class="text-right px-2 py-1.5">impressions</th>
+            <th class="text-right px-2 py-1.5">clicks</th>
+            <th class="text-right px-2 py-1.5">CTR</th>
+            <th class="text-right px-2 py-1.5">spend</th>
+            <th class="text-right px-2 py-1.5">CV</th>
+            <th class="text-right px-2 py-1.5">CPA</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${weeks.map(w => `<tr class="border-b border-slate-100 hover:bg-slate-50">
+            <td class="px-2 py-1 font-mono">${w.start} 〜 ${w.end}</td>
+            <td class="px-2 py-1 text-right">${w.days}</td>
+            <td class="px-2 py-1 text-right tabular-nums">${w.imp.toLocaleString()}</td>
+            <td class="px-2 py-1 text-right tabular-nums">${w.click.toLocaleString()}</td>
+            <td class="px-2 py-1 text-right tabular-nums ${w.ctr >= 10 ? 'text-green-600 font-semibold' : w.ctr < 1 ? 'text-red-500':''}">${w.ctr.toFixed(2)}%</td>
+            <td class="px-2 py-1 text-right tabular-nums">¥${w.spend.toLocaleString()}</td>
+            <td class="px-2 py-1 text-right tabular-nums ${w.cv >= 100 ? 'text-green-600 font-semibold' : ''}">${w.cv}</td>
+            <td class="px-2 py-1 text-right tabular-nums ${w.cpa && w.cpa <= 500 ? 'text-green-600 font-semibold' : w.cpa && w.cpa >= 2000 ? 'text-red-500':''}">${w.cpa ? '¥'+w.cpa.toLocaleString() : '-'}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>`}
+      <p class="text-[10px] text-slate-400 mt-2">※ 時間帯別 (hourly) は Phase 2 (Meta API hourly breakdown wire)</p>
+    </section>
+
+    <!-- 日次テーブル -->
+    <section class="bg-white rounded-xl p-5 mb-5 shadow-sm">
+      <h3 class="font-semibold mb-3">日次推移 (${daily.length}日)</h3>
+      <div class="overflow-x-auto">
+        <table class="text-xs w-full">
+          <thead class="bg-slate-100 text-slate-600">
+            <tr>
+              <th class="text-left px-2 py-1.5">日付</th>
+              <th class="text-right px-2 py-1.5">imp</th>
+              <th class="text-right px-2 py-1.5">click</th>
+              <th class="text-right px-2 py-1.5">CTR</th>
+              <th class="text-right px-2 py-1.5">link_click</th>
+              <th class="text-right px-2 py-1.5">spend</th>
+              <th class="text-right px-2 py-1.5">CV</th>
+              <th class="text-right px-2 py-1.5">CPA</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${daily.map(r => `<tr class="border-b border-slate-100 hover:bg-slate-50">
+              <td class="px-2 py-1 font-mono">${r.date}</td>
+              <td class="px-2 py-1 text-right tabular-nums">${r.imp.toLocaleString()}</td>
+              <td class="px-2 py-1 text-right tabular-nums">${r.click}</td>
+              <td class="px-2 py-1 text-right tabular-nums ${r.ctr >= 10 ? 'text-green-600 font-semibold' : r.ctr < 1 ? 'text-red-500':''}">${r.ctr.toFixed(2)}%</td>
+              <td class="px-2 py-1 text-right tabular-nums">${r.link}</td>
+              <td class="px-2 py-1 text-right tabular-nums">¥${r.spend.toLocaleString()}</td>
+              <td class="px-2 py-1 text-right tabular-nums ${r.cv >= 20 ? 'text-green-600 font-semibold' : ''}">${r.cv}</td>
+              <td class="px-2 py-1 text-right tabular-nums ${r.cpa && r.cpa <= 500 ? 'text-green-600 font-semibold' : r.cpa && r.cpa >= 2000 ? 'text-red-500':''}">${r.cpa ? '¥'+r.cpa.toLocaleString() : '-'}</td>
+            </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- LP分析 -->
+    <section class="bg-white rounded-xl p-5 mb-5 shadow-sm">
+      <h3 class="font-semibold mb-3">LP分析 (${cfg.lps.length}本)</h3>
+      <table class="text-xs w-full">
+        <thead class="bg-slate-100 text-slate-600">
+          <tr>
+            <th class="text-left px-2 py-1.5">URL</th>
+            <th class="text-left px-2 py-1.5">variant</th>
+            <th class="text-left px-2 py-1.5">訴求軸</th>
+            <th class="text-left px-2 py-1.5">ステータス</th>
+            <th class="text-right px-2 py-1.5">sessions</th>
+            <th class="text-right px-2 py-1.5">LP到達率</th>
+            <th class="text-right px-2 py-1.5">line_tap率</th>
+            <th class="text-right px-2 py-1.5">scroll90率</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${cfg.lps.map(lp => `<tr class="border-b border-slate-100">
+            <td class="px-2 py-1 truncate max-w-xs" title="${lp.url}"><a href="${lp.url}" target="_blank" class="text-indigo-600 hover:underline">${lp.url}</a></td>
+            <td class="px-2 py-1">${lp.variant}</td>
+            <td class="px-2 py-1">${lp.axis}</td>
+            <td class="px-2 py-1">${lp.status}</td>
+            <td class="px-2 py-1 text-right text-slate-300">—</td>
+            <td class="px-2 py-1 text-right text-slate-300">—</td>
+            <td class="px-2 py-1 text-right text-slate-300">—</td>
+            <td class="px-2 py-1 text-right text-slate-300">—</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+      <p class="text-[10px] text-slate-400 mt-2">数値カラムは Phase 2 で GA4 wire (sessions / LPV率 / line_tap率 / scroll90率)</p>
+    </section>
+
+    ${renderActionsSection(dept)}
+
+    <!-- クリエ分析 (画像 + 累計数値) -->
+    <section class="bg-white rounded-xl p-5 mb-5 shadow-sm">
+      <h3 class="font-semibold mb-3">クリエ分析 (${ads.length}本、累計値で比較)</h3>
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        ${ads.map(a => {
+          const adset = (DATA.adsets||[]).find(s=>s.id===a.adset_id);
+          const isOldLP = a.link && a.link.includes("karada-kenko.jp");
+          const tot = (a.daily||[]).reduce((acc,r)=>({
+            imp:acc.imp+r[COL.IMP], click:acc.click+r[COL.CLICK], spend:acc.spend+r[COL.SPEND], cv:acc.cv+r[COL.CV]
+          }), {imp:0,click:0,spend:0,cv:0});
+          const ctr = tot.imp ? (tot.click/tot.imp*100).toFixed(2)+"%" : "-";
+          const cpa = tot.cv ? "¥"+Math.round(tot.spend/tot.cv).toLocaleString() : "-";
+          return `<div class="bg-slate-50 rounded-lg overflow-hidden cursor-pointer hover:ring-2 hover:ring-indigo-400" onclick="document.getElementById('ad_daily_${a.id}').scrollIntoView({behavior:'smooth'})">
+            <img src="${a.image}" alt="" class="w-full" style="aspect-ratio:1/1;object-fit:cover" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'flex items-center justify-center bg-slate-200 text-slate-500 text-[10px] p-2 text-center',style:'aspect-ratio:1/1',textContent:'(画像URL期限切れ\\nMeta再取得で復旧)'}))">
+            <div class="p-2 text-xs">
+              <div class="font-semibold truncate" title="${a.name}">${a.name}</div>
+              <div class="flex flex-wrap gap-1 mt-1">
+                <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">${a.axis}</span>
+                ${adset ? `<span class="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-200" title="${adset.name}">${adset.name.slice(0,15)}…</span>` : ""}
+              </div>
+              <div class="text-[10px] text-slate-400 mt-1 truncate ${isOldLP ? 'text-red-500':''}">${isOldLP ? '[旧karaken] ' : ''}${a.link ? new URL(a.link).pathname : ''}</div>
+              <div class="grid grid-cols-3 gap-1 mt-2 text-[10px]">
+                <div>imp <span class="font-mono">${tot.imp.toLocaleString()}</span></div>
+                <div>CTR <span class="font-mono ${parseFloat(ctr) >= 10 ? 'text-green-600 font-bold' : parseFloat(ctr) < 1 ? 'text-red-500':''}">${ctr}</span></div>
+                <div>CPA <span class="font-mono ${tot.cv && tot.spend/tot.cv <= 500 ? 'text-green-600 font-bold' : tot.cv && tot.spend/tot.cv >= 2000 ? 'text-red-500':''}">${cpa}</span></div>
+              </div>
+              <div class="grid grid-cols-2 gap-1 mt-1 text-[10px] text-slate-500">
+                <div>spend ¥${tot.spend.toLocaleString()}</div>
+                <div>CV ${tot.cv}</div>
+              </div>
+            </div>
+          </div>`;
+        }).join("")}
+      </div>
+    </section>
+
+    <!-- クリエ単位 日次テーブル (アコーディオン) -->
+    <section class="bg-white rounded-xl p-5 shadow-sm">
+      <h3 class="font-semibold mb-3">クリエ単位 日次推移 (${ads.length}本)</h3>
+      ${ads.map(a => {
+        const adset = (DATA.adsets||[]).find(s=>s.id===a.adset_id);
+        const daily = [...(a.daily||[])].sort((x,y)=>y[COL.DATE].localeCompare(x[COL.DATE]));
+        const tot = daily.reduce((acc,r)=>({
+          imp:acc.imp+r[COL.IMP], click:acc.click+r[COL.CLICK], spend:acc.spend+r[COL.SPEND], link:acc.link+r[COL.LINK], cv:acc.cv+r[COL.CV]
+        }), {imp:0,click:0,spend:0,link:0,cv:0});
+        const ctr = tot.imp ? (tot.click/tot.imp*100).toFixed(2)+"%" : "-";
+        const cpa = tot.cv ? "¥"+Math.round(tot.spend/tot.cv).toLocaleString() : "-";
+        return `<details id="ad_daily_${a.id}" class="mb-3 border border-slate-200 rounded-lg" ${daily.length > 5 ? 'open' : ''}>
+          <summary class="cursor-pointer px-3 py-2 hover:bg-slate-50 text-xs flex items-center gap-2 flex-wrap">
+            <img src="${a.image}" class="w-8 h-8 rounded object-cover" referrerpolicy="no-referrer" onerror="this.style.display='none'">
+            <span class="font-semibold">${a.name}</span>
+            <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">${a.axis}</span>
+            ${adset ? `<span class="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-200">${adset.name.slice(0,20)}</span>` : ""}
+            <span class="ml-auto text-slate-500">${daily.length}日 / imp ${tot.imp.toLocaleString()} / CTR ${ctr} / CV ${tot.cv} / CPA ${cpa}</span>
+          </summary>
+          <div class="overflow-x-auto px-3 pb-3">
+            ${daily.length === 0 ? '<p class="text-xs text-slate-500 py-2">日次データなし</p>' :
+            `<table class="text-xs w-full">
+              <thead class="bg-slate-50 text-slate-600">
+                <tr><th class="text-left px-2 py-1">日付</th><th class="text-right px-2 py-1">imp</th><th class="text-right px-2 py-1">click</th><th class="text-right px-2 py-1">CTR</th><th class="text-right px-2 py-1">link</th><th class="text-right px-2 py-1">spend</th><th class="text-right px-2 py-1">CV</th><th class="text-right px-2 py-1">CPA</th></tr>
+              </thead>
+              <tbody>
+                ${daily.map(r => {
+                  const cpaR = r[COL.CV] ? Math.round(r[COL.SPEND]/r[COL.CV]) : null;
+                  return `<tr class="border-b border-slate-100">
+                    <td class="px-2 py-0.5 font-mono">${r[COL.DATE]}</td>
+                    <td class="px-2 py-0.5 text-right tabular-nums">${r[COL.IMP].toLocaleString()}</td>
+                    <td class="px-2 py-0.5 text-right tabular-nums">${r[COL.CLICK]}</td>
+                    <td class="px-2 py-0.5 text-right tabular-nums ${r[COL.CTR] >= 10 ? 'text-green-600 font-semibold' : r[COL.CTR] < 1 ? 'text-red-500':''}">${r[COL.CTR].toFixed(2)}%</td>
+                    <td class="px-2 py-0.5 text-right tabular-nums">${r[COL.LINK]}</td>
+                    <td class="px-2 py-0.5 text-right tabular-nums">¥${r[COL.SPEND].toLocaleString()}</td>
+                    <td class="px-2 py-0.5 text-right tabular-nums ${r[COL.CV] >= 5 ? 'text-green-600 font-semibold' : ''}">${r[COL.CV]}</td>
+                    <td class="px-2 py-0.5 text-right tabular-nums ${cpaR && cpaR <= 500 ? 'text-green-600 font-semibold' : cpaR && cpaR >= 2000 ? 'text-red-500':''}">${cpaR ? '¥'+cpaR.toLocaleString() : '-'}</td>
+                  </tr>`;
+                }).join("")}
+              </tbody>
+            </table>`}
+          </div>
+        </details>`;
+      }).join("")}
+    </section>
+  `;
+}
+
+function route() {
+  const hash = location.hash;
+  const overview = document.getElementById("view_overview");
+  const detail = document.getElementById("view_detail");
+  document.querySelectorAll(".nav-link").forEach(a => {
+    a.classList.remove("bg-indigo-600","text-white");
+    a.classList.add("bg-slate-200");
+  });
+  if (hash.startsWith("#/dept/")) {
+    const dept = decodeURIComponent(hash.replace("#/dept/", ""));
+    overview.classList.add("hidden");
+    detail.classList.remove("hidden");
+    renderDeptDetail(dept);
+    const link = document.querySelector(`.nav-link[href="#/dept/${dept}"]`);
+    if (link) { link.classList.remove("bg-slate-200"); link.classList.add("bg-indigo-600","text-white"); }
+  } else {
+    overview.classList.remove("hidden");
+    detail.classList.add("hidden");
+    const link = document.querySelector('.nav-link[href="#"]');
+    if (link) { link.classList.remove("bg-slate-200"); link.classList.add("bg-indigo-600","text-white"); }
+  }
+}
+window.addEventListener("hashchange", route);
+
+document.getElementById("refresh_btn").onclick = async () => {
+  const btn = document.getElementById("refresh_btn");
+  btn.disabled = true; btn.textContent = "Meta API取得中… (約10秒)";
+  try {
+    // Edge Function dashboard/refresh エンドポイント（同origin、Basic Authはbrowser cookieで継続）
+    const r = await fetch("./refresh", { method: "POST" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const result = await r.json();
+    btn.textContent = "更新完了 (" + (result.summary?.ads || 0) + " ads, " + (result.summary?.ad_days || 0) + " ad-days)";
+    setTimeout(() => location.reload(), 1200);
+  } catch (e) {
+    btn.textContent = "失敗: " + (e.message || "");
+    setTimeout(() => { btn.textContent = "Meta再取得"; btn.disabled = false; }, 3000);
+  }
+};
+</script>
+</body>
+</html>
