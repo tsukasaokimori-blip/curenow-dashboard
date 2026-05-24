@@ -456,13 +456,13 @@ function actionsForDept(dept) {
   return list;
 }
 function renderActionsTimeline(dept) {
-  // 日付降順 → 年月でグルーピング
-  const actions = actionsForDept(dept).filter(a => a.date);
+  // 日付降順 → 年月でグルーピング (date field 優先、無ければ created_time fallback)
+  const actions = actionsForDept(dept).map(a => ({...a, _ts: a.date || a.created_time || ""})).filter(a => a._ts);
   if (actions.length === 0) return "";
-  const sorted = [...actions].sort((a,b) => (b.date||"").localeCompare(a.date||""));
+  const sorted = [...actions].sort((a,b) => (b._ts||"").localeCompare(a._ts||""));
   const groups = {};
   sorted.forEach(a => {
-    const ym = (a.date||"").slice(0,7);
+    const ym = (a._ts||"").slice(0,7);
     if (!groups[ym]) groups[ym] = [];
     groups[ym].push(a);
   });
@@ -485,7 +485,7 @@ function renderActionsTimeline(dept) {
                 return `<div class="relative bg-slate-50 rounded-lg p-3 ${cursor} hover:shadow-sm transition" ${onclick}>
                   <div class="absolute -left-[1.85rem] top-4 w-3 h-3 rounded-full bg-indigo-500 border-2 border-white"></div>
                   <div class="flex items-center gap-2 flex-wrap text-xs mb-1">
-                    <span class="font-mono text-slate-400">${escapeHtml(a.date||"")}</span>
+                    <span class="font-mono text-slate-400">${escapeHtml(a._ts||"")}</span>
                     <span class="text-[10px] px-2 py-0.5 rounded-full ${statusCls}">${escapeHtml(a.status||"")}</span>
                     <span class="text-[10px] px-2 py-0.5 rounded-full ${prioCls}">${escapeHtml(a.priority||"")}</span>
                     <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">${escapeHtml(a.category||"")}</span>
