@@ -455,6 +455,54 @@ function actionsForDept(dept) {
   });
   return list;
 }
+function renderActionsTimeline(dept) {
+  // 日付降順 → 年月でグルーピング
+  const actions = actionsForDept(dept).filter(a => a.date);
+  if (actions.length === 0) return "";
+  const sorted = [...actions].sort((a,b) => (b.date||"").localeCompare(a.date||""));
+  const groups = {};
+  sorted.forEach(a => {
+    const ym = (a.date||"").slice(0,7);
+    if (!groups[ym]) groups[ym] = [];
+    groups[ym].push(a);
+  });
+  const months = Object.keys(groups).sort().reverse();
+  return `
+    <section class="bg-white rounded-xl p-5 mb-5 shadow-sm">
+      <h3 class="font-semibold mb-4">施策タイムライン <span class="text-xs font-normal text-slate-500">${actions.length}件</span></h3>
+      <div class="relative pl-6 border-l-2 border-slate-200 space-y-6">
+        ${months.map(ym => `
+          <div>
+            <div class="text-xs font-bold text-slate-500 mb-2 -ml-8 pl-2 bg-slate-50 inline-block rounded">${ym}</div>
+            <div class="space-y-2">
+              ${groups[ym].map(a => {
+                const statusCls = ACTION_STATUS_STYLE[a.status] || "bg-slate-200 text-slate-700";
+                const prioCls = ACTION_PRIORITY_STYLE[a.priority] || "bg-slate-200 text-slate-600";
+                const url = a.notion_url ? escapeHtml(a.notion_url) : "";
+                const onclick = url ? `onclick="window.open('${url}','_blank','noopener')"` : "";
+                const cursor = url ? "cursor-pointer" : "";
+                const metrics = Array.isArray(a.metrics) ? a.metrics.join(" / ") : "";
+                return `<div class="relative bg-slate-50 rounded-lg p-3 ${cursor} hover:shadow-sm transition" ${onclick}>
+                  <div class="absolute -left-[1.85rem] top-4 w-3 h-3 rounded-full bg-indigo-500 border-2 border-white"></div>
+                  <div class="flex items-center gap-2 flex-wrap text-xs mb-1">
+                    <span class="font-mono text-slate-400">${escapeHtml(a.date||"")}</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full ${statusCls}">${escapeHtml(a.status||"")}</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full ${prioCls}">${escapeHtml(a.priority||"")}</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">${escapeHtml(a.category||"")}</span>
+                  </div>
+                  <div class="text-sm font-semibold text-slate-800">${escapeHtml(a.title||"")}</div>
+                  ${a.expect ? `<div class="text-xs text-slate-600 mt-1">${escapeHtml(a.expect)}</div>` : ""}
+                  ${metrics ? `<div class="text-[10px] text-slate-500 mt-1">指標: ${escapeHtml(metrics)}</div>` : ""}
+                </div>`;
+              }).join("")}
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
 function renderActionsSection(dept) {
   const actions = actionsForDept(dept);
   return `
@@ -648,6 +696,7 @@ function renderDeptDetail(dept) {
       <p class="text-[10px] text-slate-400 mt-2">数値カラムは Phase 2 で GA4 wire (sessions / LPV率 / line_tap率 / scroll90率)</p>
     </section>
 
+    ${renderActionsTimeline(dept)}
     ${renderActionsSection(dept)}
 
     <!-- クリエ分析 (画像 + 累計数値) -->
