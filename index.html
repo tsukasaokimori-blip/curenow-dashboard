@@ -455,59 +455,71 @@ function actionsForDept(dept) {
   });
   return list;
 }
-function renderActionsTimeline(dept) {
-  // 日付降順 → 年月でグルーピング (date field 優先、無ければ created_time fallback)
-  const actions = actionsForDept(dept).map(a => ({...a, _ts: a.date || a.created_time || ""})).filter(a => a._ts);
-  if (actions.length === 0) return "";
-  const sorted = [...actions].sort((a,b) => (b._ts||"").localeCompare(a._ts||""));
-  const groups = {};
-  sorted.forEach(a => {
-    const ym = (a._ts||"").slice(0,7);
-    if (!groups[ym]) groups[ym] = [];
-    groups[ym].push(a);
-  });
-  const months = Object.keys(groups).sort().reverse();
-  return `
-    <section class="bg-white rounded-xl p-5 mb-5 shadow-sm">
-      <h3 class="font-semibold mb-4">施策タイムライン <span class="text-xs font-normal text-slate-500">${actions.length}件</span></h3>
-      <div class="relative pl-6 border-l-2 border-slate-200 space-y-6">
-        ${months.map(ym => `
-          <div>
-            <div class="text-xs font-bold text-slate-500 mb-2 -ml-8 pl-2 bg-slate-50 inline-block rounded">${ym}</div>
-            <div class="space-y-2">
-              ${groups[ym].map(a => {
-                const statusCls = ACTION_STATUS_STYLE[a.status] || "bg-slate-200 text-slate-700";
-                const prioCls = ACTION_PRIORITY_STYLE[a.priority] || "bg-slate-200 text-slate-600";
-                const url = a.notion_url ? escapeHtml(a.notion_url) : "";
-                const onclick = url ? `onclick="window.open('${url}','_blank','noopener')"` : "";
-                const cursor = url ? "cursor-pointer" : "";
-                const metrics = Array.isArray(a.metrics) ? a.metrics.join(" / ") : "";
-                return `<div class="relative bg-slate-50 rounded-lg p-3 ${cursor} hover:shadow-sm transition" ${onclick}>
-                  <div class="absolute -left-[1.85rem] top-4 w-3 h-3 rounded-full bg-indigo-500 border-2 border-white"></div>
-                  <div class="flex items-center gap-2 flex-wrap text-xs mb-1">
-                    <span class="font-mono text-slate-400">${escapeHtml(a._ts||"")}</span>
-                    <span class="text-[10px] px-2 py-0.5 rounded-full ${statusCls}">${escapeHtml(a.status||"")}</span>
-                    <span class="text-[10px] px-2 py-0.5 rounded-full ${prioCls}">${escapeHtml(a.priority||"")}</span>
-                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">${escapeHtml(a.category||"")}</span>
-                  </div>
-                  <div class="text-sm font-semibold text-slate-800">${escapeHtml(a.title||"")}</div>
-                  ${a.expect ? `<div class="text-xs text-slate-600 mt-1">${escapeHtml(a.expect)}</div>` : ""}
-                  ${metrics ? `<div class="text-[10px] text-slate-500 mt-1">指標: ${escapeHtml(metrics)}</div>` : ""}
-                </div>`;
-              }).join("")}
-            </div>
-          </div>
-        `).join("")}
-      </div>
-    </section>
-  `;
+// metric 正規化: Notion の自由記述を内部キーに寄せる
+const METRIC_DEF = {
+  ctr:   { label: "CTR",   dir: "up",   calc: s => s.imp   ? (s.click/s.imp*100) : null, fmt: v => v.toFixed(2)+"%" },
+  cpa:   { label: "CPA",   dir: "down", calc: s => s.cv    ? Math.round(s.spend/s.cv) : null, fmt: v => "¥"+v.toLocaleString() },
+  cvr:   { label: "CVR",   dir: "up",   calc: s => s.click ? (s.cv/s.click*100) : null, fmt: v => v.toFixed(2)+"%" },
+  cv:    { label: "CV",    dir: "up",   calc: s => s.cv,  fmt: v => String(v) },
+  lpv:   { label: "LPV",   dir: "up",   calc: s => s.link, fmt: v => String(v) },
+  cpc:   { label: "CPC",   dir: "down", calc: s => s.click ? Math.round(s.spend/s.click) : null, fmt: v => "¥"+v.toLocaleString() },
+  spend: { label: "spend", dir: "down", calc: s => s.spend, fmt: v => "¥"+v.toLocaleString() }
+};
+function normalizeMetric(m) {
+  const k = String(m||"").trim().toLowerCase();
+  if (!k) return null;
+  if (/cpa/.test(k)) return "cpa";
+  if (/cvr|cv率|cv比/.test(k)) return "cvr";
+  if (/ctr/.test(k)) return "ctr";
+  if (/cpc/.test(k)) return "cpc";
+  if (/lpv|link.?click|lp遷移|landing/.test(k)) return "lpv";
+  if (/spend|予算|消化/.test(k)) return "spend";
+  if (/cv|登録|line/.test(k)) return "cv";
+  return null;
+}
+function computeActionResult(action, daily) {
+  if (!action.date || !daily.length) return null;
+  const sorted = [...daily].sort((a,b)=>a.date.localeCompare(b.date));
+  const before = sorted.filter(r => r.date < action.date).slice(-7);
+  const after  = sorted.filter(r => r.date >= action.date).slice(0, 7);
+  const sum = arr => arr.reduce((a,r)=>({
+    imp:a.imp+r.imp, click:a.click+r.click, spend:a.spend+r.spend, link:a.link+r.link, cv:a.cv+r.cv
+  }), {imp:0,click:0,spend:0,link:0,cv:0});
+  return { beforeSum: sum(before), afterSum: sum(after), beforeDays: before.length, afterDays: after.length };
+}
+function renderActionResult(action, daily) {
+  const metrics = Array.isArray(action.metrics) ? action.metrics : [];
+  if (metrics.length === 0) return '<span class="text-slate-300 text-[10px]">指標未設定</span>';
+  if (!action.date) return '<span class="text-slate-300 text-[10px]">実施日なし</span>';
+  const r = computeActionResult(action, daily);
+  if (!r) return '<span class="text-slate-300 text-[10px]">-</span>';
+  if (r.afterDays === 0) return '<span class="text-slate-400 text-[10px]">本日以降に観測開始</span>';
+  if (r.afterDays < 7) return `<span class="text-slate-400 text-[10px]">観測中 (${r.afterDays}/7日)</span>`;
+  if (r.beforeDays === 0) return '<span class="text-slate-300 text-[10px]">実施前データなし</span>';
+  return metrics.map(m => {
+    const key = normalizeMetric(m);
+    if (!key) return `<div class="text-slate-400 text-[10px]">${escapeHtml(m)}: 計測対象外</div>`;
+    const def = METRIC_DEF[key];
+    const b = def.calc(r.beforeSum);
+    const a = def.calc(r.afterSum);
+    if (b == null || a == null) return `<div class="text-slate-400 text-[10px]">${def.label}: 算出不可</div>`;
+    const delta = b !== 0 ? ((a-b)/b*100) : null;
+    const eq = a === b;
+    const improved = !eq && (def.dir === "up" ? a > b : a < b);
+    const arrow = eq ? "→" : (a > b ? "↑" : "↓");
+    const cls = eq ? "text-slate-500" : improved ? "text-green-700" : "text-red-700";
+    const deltaStr = delta == null ? "" : ` (${delta >= 0 ? "+" : ""}${delta.toFixed(0)}%)`;
+    return `<div class="${cls} text-[11px] leading-tight"><span class="font-mono font-semibold">${def.label}</span> ${def.fmt(b)} → ${def.fmt(a)} ${arrow}${deltaStr}</div>`;
+  }).join("");
 }
 
 function renderActionsSection(dept) {
   const actions = actionsForDept(dept);
+  const daily = dailyForDept(dept);
   return `
     <section class="bg-white rounded-xl p-5 mb-5 shadow-sm">
-      <h3 class="font-semibold mb-3">実施中施策 (Notion cmo-ai-ad-log) <span class="text-xs font-normal text-slate-500">${actions.length}件</span></h3>
+      <h3 class="font-semibold mb-1">実施中施策 (Notion cmo-ai-ad-log) <span class="text-xs font-normal text-slate-500">${actions.length}件</span></h3>
+      <p class="text-[10px] text-slate-400 mb-3">「結果」列は 施策実施日を境に <span class="font-mono">実施前7日平均 vs 実施後7日平均</span> を計算。CPA/CPC/spend は減少が改善、CTR/CVR/CV/LPV は増加が改善。</p>
       ${actions.length === 0 ? '<p class="text-sm text-slate-500">この科目で実施中施策はまだありません</p>' :
       `<div class="overflow-x-auto">
         <table class="text-xs w-full">
@@ -516,9 +528,11 @@ function renderActionsSection(dept) {
               <th class="text-left px-2 py-1.5">status</th>
               <th class="text-left px-2 py-1.5">prio</th>
               <th class="text-left px-2 py-1.5">category</th>
+              <th class="text-left px-2 py-1.5">実施日</th>
               <th class="text-left px-2 py-1.5">施策名</th>
               <th class="text-left px-2 py-1.5">期待効果</th>
               <th class="text-left px-2 py-1.5">改善指標</th>
+              <th class="text-left px-2 py-1.5">結果 (前7日 vs 後7日)</th>
             </tr>
           </thead>
           <tbody>
@@ -529,13 +543,15 @@ function renderActionsSection(dept) {
               const onclick = url ? `onclick="window.open('${url}','_blank','noopener')"` : "";
               const cursor = url ? "cursor-pointer" : "";
               const metrics = Array.isArray(a.metrics) ? a.metrics.join(" / ") : "";
-              return `<tr class="border-b border-slate-100 hover:bg-slate-50 ${cursor}" ${onclick}>
-                <td class="px-2 py-1"><span class="text-[10px] px-2 py-0.5 rounded-full ${statusCls}">${escapeHtml(a.status||"")}</span></td>
-                <td class="px-2 py-1"><span class="text-[10px] px-2 py-0.5 rounded-full ${prioCls}">${escapeHtml(a.priority||"")}</span></td>
-                <td class="px-2 py-1"><span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">${escapeHtml(a.category||"")}</span></td>
-                <td class="px-2 py-1 font-semibold" title="${escapeHtml(a.title||"")}">${escapeHtml(a.title||"")}</td>
-                <td class="px-2 py-1 text-slate-600 max-w-xs truncate" title="${escapeHtml(a.expect||"")}">${escapeHtml(a.expect||"")}</td>
-                <td class="px-2 py-1 text-slate-500">${escapeHtml(metrics)}</td>
+              return `<tr class="border-b border-slate-100 hover:bg-slate-50 ${cursor} align-top" ${onclick}>
+                <td class="px-2 py-1.5"><span class="text-[10px] px-2 py-0.5 rounded-full ${statusCls}">${escapeHtml(a.status||"")}</span></td>
+                <td class="px-2 py-1.5"><span class="text-[10px] px-2 py-0.5 rounded-full ${prioCls}">${escapeHtml(a.priority||"")}</span></td>
+                <td class="px-2 py-1.5"><span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">${escapeHtml(a.category||"")}</span></td>
+                <td class="px-2 py-1.5 font-mono text-slate-500 text-[10px] whitespace-nowrap">${escapeHtml(a.date||"")}</td>
+                <td class="px-2 py-1.5 font-semibold" title="${escapeHtml(a.title||"")}">${escapeHtml(a.title||"")}</td>
+                <td class="px-2 py-1.5 text-slate-600 max-w-xs truncate" title="${escapeHtml(a.expect||"")}">${escapeHtml(a.expect||"")}</td>
+                <td class="px-2 py-1.5 text-slate-500 text-[10px]">${escapeHtml(metrics)}</td>
+                <td class="px-2 py-1.5 min-w-[200px]">${renderActionResult(a, daily)}</td>
               </tr>`;
             }).join("")}
           </tbody>
@@ -696,7 +712,6 @@ function renderDeptDetail(dept) {
       <p class="text-[10px] text-slate-400 mt-2">数値カラムは Phase 2 で GA4 wire (sessions / LPV率 / line_tap率 / scroll90率)</p>
     </section>
 
-    ${renderActionsTimeline(dept)}
     ${renderActionsSection(dept)}
 
     <!-- クリエ分析 (画像 + 累計数値) -->
